@@ -12,18 +12,25 @@ defmodule Game do
     )
   end
 
-  def scoop(board, position) do
-    tokens = Enum.fetch!(board.houses, position)
-    board = %State{
-      houses: List.replace_at(board.houses, position, 0),
-      scoops: board.scoops
-    }
+  defp play_house(board, position) do
+    board = %{board | scoops: board.scoops ++ [position] }
+    {board, tokens} = scoop(board, position)
+    sow(board, position + 1, tokens, false)
+  end
 
-    {:ok, board, tokens}
+  defp tokens(board, position) do
+    Enum.fetch!(board.houses, position)
+  end
+
+  defp scoop(board, position) do
+    {
+      %{ board | houses: List.replace_at(board.houses, position, 0) },
+      tokens(board, position)
+    }
   end
 
   defp house_empty?(board, position) do
-    Enum.fetch!(board.houses, position) == 1
+    tokens(board, position) == 1
   end
 
   defp my_storehouse?(position) do
@@ -36,7 +43,7 @@ defmodule Game do
 
   defp eat(board, position) do
     opposite_position = 15 - position - 1
-    tokens_to_eat = Enum.fetch!(board.houses, opposite_position)
+    tokens_to_eat = tokens(board, opposite_position)
 
     houses = List.replace_at(board.houses, position, 0)
 
@@ -45,19 +52,22 @@ defmodule Game do
       houses = List.update_at(houses, 7, &(&1 + tokens_to_eat + 1))
     end
 
-    %State{ houses: houses, scoops: board.scoops }
+    %{ board | houses: houses }
   end
 
   defp sow(board, position, tokens, _) when position == 15 do
     # skip opponents storehouse and start from the top
+    # since one full round has been made, we can eat the opponent's tokens
+    # from now
     sow(board, 0, tokens, true)
   end
 
   defp sow(board, position, tokens, can_eat) do
-    if Enum.fetch!(board.houses, position) == nil do
+    if tokens(board, position) == nil do
+      # skip blocked houses
       sow(board, position + 1, tokens, can_eat)
     else
-      board = %State{ houses: List.update_at(board.houses, position, &(&1 + 1)), scoops: board.scoops }
+      board = %{ board | houses: List.update_at(board.houses, position, &(&1 + 1)) }
 
       if tokens == 1 do
         if my_storehouse?(position) do
@@ -70,7 +80,7 @@ defmodule Game do
               {:end, board}
             end
           else
-            {:ok, board, tokens} = scoop(board, position)
+            {board, tokens} = scoop(board, position)
             sow(board, position + 1, tokens, can_eat)
           end
         end
@@ -80,42 +90,34 @@ defmodule Game do
     end
   end
 
-  def make_best_move do
-    make_best_move(%Game.State{})
+  def my_score(board) do
+    Enum.fetch!(board.houses, 7)
   end
 
   def make_best_move(board) do
     make_best_move(board, board)
   end
 
-  def make_best_move(board, best) do
+  defp make_best_move(board, best) do
     make_best_move(board, best, 0)
   end
 
-  def make_best_move(board, best, position) do
+  defp make_best_move(board, best, position) do
     cond do
       position == 7 ->
         best
       Enum.fetch!(board.houses, position) == 0 ->
         make_best_move(board, best, position + 1)
       true ->
-        board = %State {
-          houses: board.houses,
-          scoops: board.scoops ++ [position]
-        }
-        {:ok, board, tokens} = scoop(board, position)
-        {state, board} = sow(board, position + 1, tokens, false)
+        {state, new_board} = play_house(board, position)
 
         if state == :storehouse do
-          make_best_move(board, best, 0)
+          make_best_move(new_board, best, 0)
         else # round finished
-          if Enum.fetch!(board.houses, 7) > Enum.fetch!(best.houses, 7) do
-            tmp_best = board
-          else
-            tmp_best = best
+          if Enum.fetch!(new_board.houses, 7) > Enum.fetch!(best.houses, 7) do
+            best = new_board
           end
-
-          make_best_move(board, tmp_best, position + 1)
+          make_best_move(board, best, position + 1)
         end
     end
   end
@@ -123,10 +125,11 @@ end
 
 defmodule Congkak do
   def main do
-    state = Game.make_best_move
+    new_game = %Game.State{}
+    final_state = Game.make_best_move(new_game)
 
-    IO.inspect state
-    IO.inspect Enum.fetch!(state.houses, 7)
+    IO.inspect final_state
+    IO.inspect Game.my_score(final_state)
   end
 end
 

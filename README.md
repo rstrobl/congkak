@@ -1,3 +1,3 @@
 ### Run Application
 
-$ elixirc congkak.ex
+```$ elixir congkak.exs```
